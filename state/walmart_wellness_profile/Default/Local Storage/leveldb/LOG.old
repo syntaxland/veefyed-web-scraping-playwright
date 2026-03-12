@@ -1,0 +1,8 @@
+2026/03/12-15:54:15.926 511d Reusing MANIFEST /home/jb/Documents/dev/others/veefyed-web-scraping-playwright/state/walmart_wellness_profile/Default/Local Storage/leveldb/MANIFEST-000001
+2026/03/12-15:54:15.936 511d Recovering log #3
+2026/03/12-15:54:16.187 511d Level-0 table #3: started
+2026/03/12-15:54:16.381 511d Level-0 table #3: 138938 bytes OK
+2026/03/12-15:54:16.457 511d Recovering log #4
+2026/03/12-15:54:16.459 511d Reusing old log /home/jb/Documents/dev/others/veefyed-web-scraping-playwright/state/walmart_wellness_profile/Default/Local Storage/leveldb/000004.log 
+2026/03/12-15:54:16.643 511d Delete type=2 #5
+2026/03/12-15:54:16.643 511d Delete type=0 #3

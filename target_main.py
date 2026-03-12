@@ -1,0 +1,377 @@
+# target_main.py
+
+import json
+import re
+import time
+from pathlib import Path
+from typing import Any, Dict, List, Optional
+
+import pandas as pd
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+
+
+# STEP 1: Product URL and output paths
+URL = "https://www.target.com/p/noxzema-classic-clean-original-deep-cleansing-cream-12oz/-/A-11000080"
+OUTPUT_JSON = "output/target_city.json"
+OUTPUT_CSV = "output/target_city.csv"
+STATE_DIR = "state/target_profile"
+
+
+class TargetScraper:
+    def __init__(self, headless: bool = False):
+        self.headless = headless
+        self.data: List[Dict[str, Any]] = []
+
+    # STEP 2: Clean text
+    def clean_text(self, value: Optional[str]) -> Optional[str]:
+        if not value:
+            return None
+        return re.sub(r"\s+", " ", value).strip() or None
+
+    # STEP 3: Safe text extraction
+    def safe_text(self, page, selector: str, timeout: int = 3000) -> Optional[str]:
+        try:
+            locator = page.locator(selector).first
+            locator.wait_for(state="visible", timeout=timeout)
+            return self.clean_text(locator.text_content())
+        except Exception:
+            return None
+
+    # STEP 4: Safe attribute extraction
+    def safe_attr(self, page, selector: str, attr: str, timeout: int = 3000) -> Optional[str]:
+        try:
+            locator = page.locator(selector).first
+            locator.wait_for(state="attached", timeout=timeout)
+            value = locator.get_attribute(attr)
+            return self.clean_text(value)
+        except Exception:
+            return None
+
+    # STEP 5: Read body text
+    def page_text(self, page) -> str:
+        try:
+            return page.locator("body").inner_text(timeout=3000)
+        except Exception:
+            return ""
+
+    # STEP 6: Save debug files
+    def save_debug_files(self, page, prefix: str) -> None:
+        Path("output/debug").mkdir(parents=True, exist_ok=True)
+
+        try:
+            page.screenshot(path=f"output/debug/{prefix}.png", full_page=True)
+        except Exception:
+            pass
+
+        try:
+            html = page.content()
+            with open(f"output/debug/{prefix}.html", "w", encoding="utf-8") as f:
+                f.write(html)
+        except Exception:
+            pass
+
+    # STEP 7: Detect blocked/throttle pages
+    def is_blocked(self, page) -> bool:
+        text = self.page_text(page).lower()
+
+        blocked_markers = [
+            "sorry for the wait",
+            "busier than we expected",
+            "thanks for your patience",
+            "we couldn’t find this page",
+            "we couldn't find this page",
+            "having trouble finding that site",
+            "this site can’t be reached",
+            "this site can't be reached",
+            "access denied",
+            "captcha",
+            "verify you are human",
+            "robot or human",
+            "temporarily unavailable",
+            "page not found",
+            "404",
+        ]
+
+        return any(marker in text for marker in blocked_markers)
+
+    # STEP 8: Validate page looks like a real PDP
+    def is_probable_product_page(self, page) -> bool:
+        text = self.page_text(page).lower()
+
+        positive_signals = [
+            "noxzema",
+            "ingredients",
+            "description",
+            "$",
+            "add to cart",
+            "brand",
+            "12 oz",
+        ]
+
+        negative_signals = [
+            "sorry for the wait",
+            "we couldn’t find this page",
+            "we couldn't find this page",
+            "this site can’t be reached",
+            "this site can't be reached",
+            "having trouble finding that site",
+            "captcha",
+            "verify",
+        ]
+
+        positive_count = sum(1 for s in positive_signals if s in text)
+        negative_count = sum(1 for s in negative_signals if s in text)
+
+        return positive_count >= 2 and negative_count == 0
+
+    # STEP 9: Allow manual wait for throttle page
+    def wait_for_manual_resolution(self, page, seconds: int = 90) -> None:
+        print("\n[INFO] Target challenge/wait page detected.")
+        print("[INFO] Please solve it manually in the opened browser.")
+        print(f"[INFO] Waiting up to {seconds} seconds...\n")
+
+        start = time.time()
+        while time.time() - start < seconds:
+            if not self.is_blocked(page):
+                print("[INFO] Target page now looks usable.")
+                return
+            page.wait_for_timeout(2000)
+
+        print("[WARN] Target still appears blocked.")
+
+    # STEP 10: Parse JSON-LD
+    def parse_json_ld(self, page) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
+
+        try:
+            scripts = page.locator('script[type="application/ld+json"]')
+            for i in range(scripts.count()):
+                raw = scripts.nth(i).text_content()
+                if not raw:
+                    continue
+
+                try:
+                    obj = json.loads(raw)
+                except Exception:
+                    continue
+
+                items = obj if isinstance(obj, list) else [obj]
+
+                for item in items:
+                    if not isinstance(item, dict):
+                        continue
+
+                    item_type = str(item.get("@type", "")).lower()
+                    if "product" not in item_type:
+                        continue
+
+                    result["product_name"] = result.get("product_name") or item.get("name")
+
+                    brand = item.get("brand")
+                    if isinstance(brand, dict):
+                        result["brand"] = result.get("brand") or brand.get("name")
+                    elif isinstance(brand, str):
+                        result["brand"] = result.get("brand") or brand
+
+                    result["description"] = result.get("description") or item.get("description")
+
+                    image = item.get("image")
+                    if isinstance(image, list) and image:
+                        result["image"] = result.get("image") or image[0]
+                    elif isinstance(image, str):
+                        result["image"] = result.get("image") or image
+
+                    offers = item.get("offers")
+                    if isinstance(offers, list) and offers:
+                        offers = offers[0]
+                    if isinstance(offers, dict):
+                        result["price"] = result.get("price") or str(offers.get("price") or "")
+
+            return result
+        except Exception:
+            return result
+
+    # STEP 11: Extract size/volume
+    def extract_size(self, *values: Optional[str]) -> Optional[str]:
+        pattern = re.compile(r"\b\d+(?:\.\d+)?\s?(?:oz|fl oz|ml|l|g|kg|lb|ct)\b", re.I)
+
+        for value in values:
+            if not value:
+                continue
+            match = pattern.search(value)
+            if match:
+                return self.clean_text(match.group(0))
+
+        return None
+
+    # STEP 12: Regex fallback for ingredients
+    def extract_ingredients_from_text(self, text: str) -> Optional[str]:
+        match = re.search(
+            r"ingredients[:\s]+(.+?)(?:directions|how to use|warning|$)",
+            text,
+            re.I | re.S
+        )
+        if match:
+            return self.clean_text(match.group(1))
+        return None
+
+    # STEP 13: Reject bad images
+    def is_valid_image(self, url: Optional[str]) -> bool:
+        if not url:
+            return False
+
+        lower = url.lower()
+        bad_patterns = [
+            "spark-icon",
+            "logo",
+            "icon",
+            "sprite",
+            "data:image/",
+            ".svg",
+        ]
+        return not any(p in lower for p in bad_patterns)
+
+    # STEP 14: Empty fallback record
+    def build_empty_record(self, url: str) -> Dict[str, Any]:
+        return {
+            "source": "target",
+            "url": url,
+            "product_name": None,
+            "brand": None,
+            "size_volume": None,
+            "price": None,
+            "description": None,
+            "ingredients": None,
+            "image": None,
+            "blocked_or_unavailable": True,
+        }
+
+    # STEP 15: Main scraping flow
+    def scrape(self, url: str) -> None:
+        Path(STATE_DIR).mkdir(parents=True, exist_ok=True)
+
+        with sync_playwright() as p:
+            context = p.chromium.launch_persistent_context(
+                user_data_dir=STATE_DIR,
+                headless=self.headless,
+                viewport={"width": 1400, "height": 900},
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/122.0.0.0 Safari/537.36"
+                ),
+                locale="en-US",
+            )
+
+            page = context.new_page()
+
+            try:
+                print(f"[INFO] Opening {url}")
+                page.goto(url, wait_until="domcontentloaded", timeout=45000)
+                page.wait_for_timeout(6000)
+
+            except PlaywrightTimeoutError:
+                print("[WARN] Initial page load timed out.")
+                self.data.append(self.build_empty_record(url))
+                context.close()
+                return
+
+            except Exception as e:
+                print(f"[ERROR] Failed to open page: {e}")
+                self.data.append(self.build_empty_record(url))
+                context.close()
+                return
+
+            self.save_debug_files(page, "target_debug")
+
+            if self.is_blocked(page):
+                self.wait_for_manual_resolution(page, seconds=90)
+                self.save_debug_files(page, "target_debug_after_wait")
+
+            if self.is_blocked(page) or not self.is_probable_product_page(page):
+                self.data.append(self.build_empty_record(url))
+                context.close()
+                return
+
+            full_text = self.page_text(page)
+            json_ld = self.parse_json_ld(page)
+
+            # STEP 16: Extract fields only after page is confirmed valid
+            product_name = (
+                json_ld.get("product_name")
+                or self.safe_text(page, "h1")
+                or self.safe_attr(page, 'meta[property="og:title"]', "content")
+                or self.safe_text(page, '[data-test="product-title"]')
+            )
+
+            brand = (
+                json_ld.get("brand")
+                or self.safe_text(page, 'text=/brand/i')
+            )
+
+            price = (
+                json_ld.get("price")
+                or self.safe_text(page, '[data-test="product-price"]')
+                or self.safe_text(page, 'text=/\\$\\s*\\d+(?:\\.\\d{2})?/')
+                or self.safe_text(page, '[class*="price"]')
+            )
+
+            description = (
+                json_ld.get("description")
+                or self.safe_attr(page, 'meta[name="description"]', "content")
+                or self.safe_text(page, '[data-test="item-details-description"]')
+            )
+
+            ingredients = (
+                self.safe_text(page, 'text=/ingredients/i')
+                or self.safe_text(page, '[class*="ingredient"]')
+                or self.extract_ingredients_from_text(full_text)
+            )
+
+            image = (
+                json_ld.get("image")
+                or self.safe_attr(page, 'meta[property="og:image"]', "content")
+            )
+
+            if not self.is_valid_image(image):
+                image = None
+
+            size = self.extract_size(product_name, description, full_text)
+
+            record = {
+                "source": "target",
+                "url": url,
+                "product_name": self.clean_text(product_name),
+                "brand": self.clean_text(brand),
+                "size_volume": self.clean_text(size),
+                "price": self.clean_text(price),
+                "description": self.clean_text(description),
+                "ingredients": self.clean_text(ingredients),
+                "image": self.clean_text(image),
+                "blocked_or_unavailable": False,
+            }
+
+            self.data.append(record)
+            context.close()
+
+    # STEP 17: Export files
+    def export(self) -> None:
+        Path("output").mkdir(parents=True, exist_ok=True)
+
+        with open(OUTPUT_JSON, "w", encoding="utf-8") as f:
+            json.dump(self.data, f, indent=2, ensure_ascii=False)
+
+        pd.DataFrame(self.data).to_csv(OUTPUT_CSV, index=False)
+
+        print(f"[INFO] Saved JSON -> {OUTPUT_JSON}")
+        print(f"[INFO] Saved CSV  -> {OUTPUT_CSV}")
+
+
+def main():
+    scraper = TargetScraper(headless=False)
+    scraper.scrape(URL)
+    scraper.export()
+
+
+if __name__ == "__main__":
+    main()
