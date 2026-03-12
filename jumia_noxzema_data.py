@@ -3,12 +3,12 @@
 import csv
 import json
 import re
-import time
 from pathlib import Path
-from typing import Dict, Optional, Tuple, Any
+from typing import Any, Dict, Optional, Tuple
 
 from bs4 import BeautifulSoup
-from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import TimeoutError as PlaywrightTimeoutError
+from playwright.sync_api import sync_playwright
 
 
 # STEP 1: Live Jumia product URL and output paths
@@ -136,12 +136,14 @@ def looks_like_product_page(html: str) -> bool:
     text = html.lower()
     positive_signals = [
         "noxzema",
-        "12 oz",
+        "340g",
         "current price",
         "add to cart",
-        "facial cleanser",
+        "cleansing cream",
         '"@type":"product"',
         '"__typename":"product"',
+        "price in naira",
+        "jumia nigeria",
     ]
     return sum(signal in text for signal in positive_signals) >= 2
 
@@ -242,6 +244,7 @@ def extract_from_next_data(html: str) -> Dict[str, Optional[str]]:
         "product_name": None,
         "brand": None,
         "price": None,
+        "currency": None,
         "description": None,
         "image": None,
         "size_volume": None,
@@ -266,6 +269,7 @@ def extract_from_next_data(html: str) -> Dict[str, Optional[str]]:
     product_name = find_first_key(data, {"productName", "name", "title"})
     brand = find_first_key(data, {"brand", "brandName"})
     price = find_first_key(data, {"price", "currentPrice", "priceString"})
+    currency = find_first_key(data, {"currency", "currencyCode", "currencySymbol"})
     description = find_first_key(data, {"description", "shortDescription", "longDescription"})
     image = find_first_key(data, {"image", "imageUrl", "thumbnailUrl"})
     size_volume = find_first_key(data, {"size", "sizeVolume", "variantSize"})
@@ -274,13 +278,16 @@ def extract_from_next_data(html: str) -> Dict[str, Optional[str]]:
     if isinstance(brand, dict):
         brand = brand.get("name") or brand.get("brandName")
 
-    # Normalize price
+    # Normalize price without forcing USD
     if isinstance(price, (int, float)):
-        price = f"${price}"
+        price = str(price)
     elif isinstance(price, str):
         price = clean_text(price)
-        if price and re.fullmatch(r"\d+(?:\.\d{1,2})?", price):
-            price = f"${price}"
+
+    # Normalize currency
+    if isinstance(currency, dict):
+        currency = currency.get("code") or currency.get("symbol") or currency.get("name")
+    currency = clean_text(str(currency)) if currency is not None else None
 
     # Normalize image if list/dict
     if isinstance(image, list) and image:
@@ -291,6 +298,7 @@ def extract_from_next_data(html: str) -> Dict[str, Optional[str]]:
     result["product_name"] = clean_text(str(product_name)) if product_name is not None else None
     result["brand"] = clean_text(str(brand)) if brand is not None else None
     result["price"] = clean_text(str(price)) if price is not None else None
+    result["currency"] = currency or "NGN"
     result["description"] = clean_text(str(description)) if description is not None else None
     result["image"] = normalize_url(clean_text(str(image))) if image is not None else None
     result["size_volume"] = clean_text(str(size_volume)) if size_volume is not None else None
@@ -318,7 +326,7 @@ def extract_product_record_from_html(html: str, url: str) -> Dict[str, Optional[
 
     if not product_name:
         product_name = extract_first(
-            r"(Noxzema[^|]{0,200}?12\s*oz)",
+            r"(Noxzema[^|]{0,200}?340g)",
             page_text,
             flags=re.I
         )
@@ -337,6 +345,8 @@ def extract_product_record_from_html(html: str, url: str) -> Dict[str, Optional[
 
     # Price
     price = next_data.get("price")
+    currency = next_data.get("currency") or "NGN"
+
     if not price and json_ld:
         offers = json_ld.get("offers")
         if isinstance(offers, list) and offers:
@@ -344,16 +354,22 @@ def extract_product_record_from_html(html: str, url: str) -> Dict[str, Optional[
         if isinstance(offers, dict):
             price_val = offers.get("price")
             if price_val is not None:
-                price = clean_text(f"${price_val}")
+                price = clean_text(str(price_val))
+            currency = (
+                clean_text(offers.get("priceCurrency"))
+                or clean_text(offers.get("currency"))
+                or currency
+            )
 
     if not price:
         price = (
-            extract_first(r'"price"\s*:\s*"(\d+(?:\.\d{1,2})?)"', html, flags=re.I)
-            or extract_first(r'"currentPrice"\s*:\s*"?(\d+(?:\.\d{1,2})?)"?', html, flags=re.I)
-            or extract_first(r"\$ ?(\d+(?:\.\d{1,2})?)", page_text, flags=re.I)
+            extract_first(r'"price"\s*:\s*"([\d,]+(?:\.\d{1,2})?)"', html, flags=re.I)
+            or extract_first(r'"currentPrice"\s*:\s*"?([\d,]+(?:\.\d{1,2})?)"?', html, flags=re.I)
+            or extract_first(r"(?:₦|NGN)?\s*([\d,]+(?:\.\d{1,2})?)", page_text, flags=re.I)
         )
-        if price and not price.startswith("$"):
-            price = f"${price}"
+
+    if price:
+        price = price.replace(",", "")
 
     # Description
     description = (
@@ -364,7 +380,7 @@ def extract_product_record_from_html(html: str, url: str) -> Dict[str, Optional[
 
     if not description:
         description = extract_first(
-            r"(Daily[^.]{0,250})",
+            r"(Get the Moisturizing Cleansing Cream[^.]{0,250})",
             page_text,
             flags=re.I
         )
@@ -406,6 +422,7 @@ def extract_product_record_from_html(html: str, url: str) -> Dict[str, Optional[
         "brand": clean_text(brand),
         "size_volume": clean_text(size_volume),
         "price": clean_text(price),
+        "currency": clean_text(currency) or "NGN",
         "description": clean_text(description),
         "image": clean_text(image),
         "blocked_or_unavailable": False,
@@ -421,6 +438,7 @@ def empty_record(url: str) -> Dict[str, Optional[str]]:
         "brand": None,
         "size_volume": None,
         "price": None,
+        "currency": "NGN",
         "description": None,
         "image": None,
         "blocked_or_unavailable": True,
@@ -471,6 +489,7 @@ def main() -> None:
         print("[INFO] Saved CSV  ->", OUTPUT_CSV)
         print("[INFO] Product    ->", record["product_name"])
         print("[INFO] Price      ->", record["price"])
+        print("[INFO] Currency   ->", record["currency"])
         print("[INFO] Blocked    ->", record["blocked_or_unavailable"])
 
     except Exception as e:
@@ -480,3 +499,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    

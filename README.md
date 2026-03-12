@@ -1,275 +1,145 @@
+# Product Scraper Python, Playwright and BeautifulSoup (Veefyed)
 
-# Veefyed Product Scraper with Playwright
+This repository contains a set of **Python Playwright-based scrapers** designed to extract product information from several ecommerce product pages.
 
-This project contains 3 separate Playwright scrapers for extracting product details from:
+The scraper attempts to collect the following fields:
 
-- Food City
-- Target
-- Walmart
+* product name
+* brand
+* size / volume
+* price
+* description
+* ingredients (when available)
+* product image
 
-Each scraper collects:
-
-- product name
-- brand
-- size/volume
-- price
-- description
-- ingredients
-- image
-
-The data is exported to both JSON and CSV inside the `output/` folder.
+The extracted data is exported to both **JSON and CSV** formats inside the `output/` directory.
 
 ---
 
-## Project Structure
+# Target Sites
 
-```bash
-project/
-├── food_city_main.py
-├── target_main.py
-├── walmart_main.py
-├── requirements.txt
-├── output/
-├── state/
-└── README.md
-````
+The original task required scraping product pages from the following retailers:
+
+1. Food City
+2. Walmart
+3. Target
+
+During testing, an additional **Jumia product page** was used to validate that the scraper pipeline works correctly on a site without strong anti-bot protection.
 
 ---
 
-## Output Files
-
-After running the scripts, the following files will be created:
-
-```bash
-output/food_city.json
-output/food_city.csv
-output/target_city.json
-output/target_city.csv
-output/walmart_city.json
-output/walmart_city.csv
-```
-
-The `state/` folder stores persistent browser session data such as cookies and local storage.
-
----
-
-## What the Scrapers Do
-
-Each script follows this flow:
-
-1. Open the product page with Playwright.
-2. Use a persistent browser session so cookies are reused.
-3. Detect if the site shows a block page, wait page, captcha, or unavailable page.
-4. Allow manual resolution if needed while the browser is open.
-5. Extract product data using fallback logic:
-
-   * JSON-LD structured data
-   * meta tags
-   * visible page selectors
-   * regex from page text
-6. Save the result to JSON and CSV.
-
----
-
-## Requirements
-
-* Python 3.10+
-* Playwright
-* playwright-stealth
-* beautifulsoup4
-* pandas
-* python-dotenv
-
----
-
-## Installation
-
-### 1. Create virtual environment
-
-```bash
-python -m venv .venv
-```
-
-### 2. Activate virtual environment
-
-#### Linux / macOS
-
-```bash
-source .venv/bin/activate
-```
-
-#### Windows
-
-```bash
-.venv\Scripts\activate
-```
-
-### 3. Install dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Install Playwright browsers
-
-```bash
-playwright install
-```
-
----
-
-## requirements.txt
-
-Create a `requirements.txt` file like this:
-
-```txt
-playwright
-pandas
-python-dotenv
-```
-
----
-
-## How to Run
-
-Run each scraper separately.
+# Tested Product URLs
 
 ### Food City
 
-```bash
-python food_city_main.py
-```
-
-### Target
-
-```bash
-python target_main.py
-```
+[https://foodcityships.com/p/3085/Noxzema-Deep-Original-Classic-Clean-Cleansing-Cream--12-oz](https://foodcityships.com/p/3085/Noxzema-Deep-Original-Classic-Clean-Cleansing-Cream--12-oz)
 
 ### Walmart
 
-```bash
-python walmart_main.py 
-```
+[https://www.walmart.com/ip/Noxzema-Classic-Clean-Original-Deep-Cleansing-Cream-12-oz/10294073](https://www.walmart.com/ip/Noxzema-Classic-Clean-Original-Deep-Cleansing-Cream-12-oz/10294073)
 
-### Logs
+Additional Walmart test:
+[https://www.walmart.com/cp/the-wellness-hub/5523094](https://www.walmart.com/cp/the-wellness-hub/5523094)
 
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python food_city_main.py
-[INFO] Opening https://foodcityships.com/p/3085/Noxzema-Deep-Original-Classic-Clean-Cleansing-Cream--12-oz
-[ERROR] Failed to open page: Page.goto: net::ERR_NAME_NOT_RESOLVED at https://foodcityships.com/p/3085/Noxzema-Deep-Original-Classic-Clean-Cleansing-Cream--12-oz
-Call log:
-  - navigating to "https://foodcityships.com/p/3085/Noxzema-Deep-Original-Classic-Clean-Cleansing-Cream--12-oz", waiting until "domcontentloaded"
+### Target
 
-[INFO] Saved JSON -> output/food_city.json
-[INFO] Saved CSV  -> output/food_city.csv
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python target_main.py
-[INFO] Opening https://www.target.com/p/noxzema-classic-clean-original-deep-cleansing-cream-12oz/-/A-11000080
+[https://www.target.com/p/noxzema-classic-clean-original-deep-cleansing-cream-12oz/-/A-11000080](https://www.target.com/p/noxzema-classic-clean-original-deep-cleansing-cream-12oz/-/A-11000080)
 
-[INFO] Target challenge/wait page detected.
-[INFO] Please solve it manually in the opened browser.
-[INFO] Waiting up to 90 seconds...
+### Validation Test (Jumia)
 
-[WARN] Target still appears blocked.
-[INFO] Saved JSON -> output/target_city.json
-[INFO] Saved CSV  -> output/target_city.csv
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python walmart_main.py 
-[INFO] Opening https://www.walmart.com/ip/Noxzema-Classic-Clean-Original-Deep-Cleansing-Cream-12-oz/10294073
-
-[INFO] Walmart error/challenge detected.
-[INFO] Solve manually in the opened browser if needed.
-[INFO] Waiting up to 90 seconds...
-
-[WARN] Walmart still looks blocked/unavailable.
-[INFO] Saved JSON -> output/walmart_city.json
-[INFO] Saved CSV  -> output/walmart_city.csv
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ 
-
-
-
-**Tried:**
-https://www.walmart.com/cp/the-wellness-hub/5523094?povid=OMNISRV_D_i_GLOBAL_Nav_ServicesNav_HW_4097505_SuperDepartment_ClinicalServices_WellnessHub
-
-```bash
-python walmart_wellness.py
-```
-
-### Log
-
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python walmart_wellness.py
-[INFO] Opening https://www.walmart.com/cp/the-wellness-hub/5523094?povid=OMNISRV_D_i_GLOBAL_Nav_ServicesNav_HW_4097505_SuperDepartment_ClinicalServices_WellnessHub
-
-[INFO] Walmart challenge/error page detected.
-[INFO] Solve manually in the opened browser if needed.
-[INFO] Waiting up to 90 seconds...
-
-[INFO] Walmart page looks usable now.
-[DEBUG] networkidle wait skipped/timeout
-[DEBUG] No ready selector matched, continuing anyway
-[DEBUG] listing positive_count=1, negative_count=0
-[DEBUG] page text preview: robot or human?
-
-activate and hold the button to confirm that you’re human. thank you!
-
-terms of use privacy policy do not sell my personal information request my personal information
-
-©2026 walmart stores, inc.
-[DEBUG] blocked=True, probable_listing=True
-[WARN] Page still looks blocked. Saving empty fallback record.
-[INFO] Saved JSON -> output/walmart_wellness.json
-[INFO] Saved CSV  -> output/walmart_wellness.csv
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ 
-
-
-### Using beautifulsoup4
-
-```bash
-python walmart_next_data.py
-```
-
-### Live URL:
-"https://www.walmart.com/ip/Noxzema-Original-Facial-Cleanser-Cream-Daily-Deep-Face-Cleansing-for-All-Skin-Types-12-oz/14122693"
-
-### Logs
-
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python walmart_next_data.py
-[INFO] HTTP status -> 200
-[INFO] Debug HTML  -> output/debug/walmart_next_data.html
-[WARN] Walmart returned a bot/challenge page, not a product page.
-
-
-### Tried Jumia Noxzema Product Detail (SUCCESSFUL)
-
-```bash
-python jumia_noxzema_data.py
-```
-
-### Logs
-
-(.venv) jb@jb-U46E:~/Documents/dev/others/veefyed-web-scraping-playwright$ python jumia_noxzema_data.py
-[INFO] HTTP status -> 200
-[INFO] Debug HTML  -> output/debug/walmart_next_data.html
-[INFO] Saved JSON -> output/walmart_next_data.json
-[INFO] Saved CSV  -> output/walmart_next_data.csv
-[INFO] Product    -> Noxzema Moisturizing Cleansing Cream Wt Eucalyptus Extract 340g | Jumia Nigeria
-[INFO] Price      -> $35000.00
-[INFO] Blocked    -> False
-
+[https://www.jumia.com.ng/noxzema-moisturizing-cleansing-cream-wt-eucalyptus-extract-340g-418987238.html](https://www.jumia.com.ng/noxzema-moisturizing-cleansing-cream-wt-eucalyptus-extract-340g-418987238.html)
 
 ---
 
-## How the Extraction Works
+# Repository Structure
 
-The scraper tries multiple methods so it does not fail if one selector changes.
+```
+veefyed-web-scraping-playwright/
+│
+├── food_city_main.py
+├── target_main.py
+├── walmart_main.py
+├── walmart_wellness.py
+├── walmart_next_data.py
+├── jumia_noxzema_data.py
+│
+├── requirements.txt
+├── README.md
+│
+├── output/
+│   ├── food_city.json
+│   ├── food_city.csv
+│   ├── target_city.json
+│   ├── target_city.csv
+│   ├── walmart_city.json
+│   ├── walmart_city.csv
+│   ├── jumia_noxzema_data.json
+│   ├── jumia_noxzema_data.csv
+│   └── debug/
+│
+└── state/
+```
 
-### 1. JSON-LD
+The **state/** directory stores persistent browser session data such as:
 
-Many ecommerce pages include structured product data inside:
+* cookies
+* local storage
+* session data
+
+This helps maintain site sessions across runs.
+
+---
+
+# How the Scrapers Work
+
+Each scraper follows a similar pipeline.
+
+### 1. Launch Playwright Browser
+
+The scraper opens the product page using Playwright with:
+
+* a realistic browser user agent
+* persistent browser session
+* JavaScript enabled
+
+```
+launch_persistent_context(...)
+```
+
+This allows cookies and browser storage to persist across runs.
+
+---
+
+### 2. Detect Anti-Bot / Block Pages
+
+The scraper checks page content for common blocking signals such as:
+
+* captcha
+* "robot or human"
+* "sorry for the wait"
+* "access denied"
+
+If detected, the scraper:
+
+* pauses
+* allows manual resolution
+* continues extraction if the page becomes available
+
+---
+
+### 3. Extract Product Data
+
+Extraction uses multiple fallback strategies to improve reliability.
+
+#### Method 1 – JSON-LD Structured Data
+
+Many ecommerce pages embed product information inside:
 
 ```html
 <script type="application/ld+json">
 ```
 
-This is the first and most reliable source for:
+This is the most reliable source for:
 
 * product name
 * brand
@@ -277,96 +147,44 @@ This is the first and most reliable source for:
 * image
 * price
 
-### 2. Meta Tags
+---
 
-If JSON-LD is missing, the scraper checks:
+#### Method 2 – Meta Tags
+
+If JSON-LD is unavailable, the scraper checks:
 
 * `og:title`
 * `og:image`
 * `meta[name="description"]`
 
-### 3. Page Selectors
+---
 
-If structured data is missing, it looks for visible HTML elements like:
+#### Method 3 – DOM Selectors
+
+If structured data is missing, the scraper searches the page for visible elements such as:
 
 * `h1`
-* price blocks
-* ingredients section
-* description section
+* price containers
+* description blocks
+* ingredients sections
 
-### 4. Regex Fallback
+---
 
-If needed, it searches the full page text using regex for:
+#### Method 4 – Regex Fallback
 
-* size/volume
+As a final fallback, the scraper scans the full page text for patterns such as:
+
+* size / volume
 * ingredients
+* price
 
 ---
 
-## Anti-Bot / Captcha / Site Unavailable Handling
+# Output Data
 
-Some of these sites may show:
+Each run produces JSON and CSV files containing extracted product records.
 
-* captcha
-* “Sorry for the wait”
-* “We couldn’t find this page”
-* server unavailable page
-* access denied
-
-The scraper handles this by:
-
-1. launching in visible mode (`headless=False`)
-2. using a persistent browser profile
-3. checking page text for known block messages
-4. waiting for manual resolution if needed
-
-### Important
-
-This project does **not** attempt to break or bypass security systems.
-The intended workflow is:
-
-* open browser normally
-* solve any visible challenge manually if allowed
-* let session cookies persist
-* continue scraping after the page becomes available
-
----
-
-## Why Persistent Sessions Are Used
-
-Each site uses:
-
-```python
-launch_persistent_context(...)
-```
-
-instead of a fresh browser session.
-
-This helps because:
-
-* cookies are preserved
-* local storage is preserved
-* solved challenges may remain valid for later runs
-* scraping becomes more stable across retries
-
----
-
-## Data Fields
-
-Each output record contains:
-
-* `source`
-* `url`
-* `product_name`
-* `brand`
-* `size_volume`
-* `price`
-* `description`
-* `ingredients`
-* `image`
-* `blocked_or_unavailable`
-
-Example:
+Example output:
 
 ```json
 [
@@ -387,96 +205,163 @@ Example:
 
 ---
 
-## Error Handling
+# Installation
 
-The code is designed to fail gracefully.
+### 1. Create virtual environment
 
-### Included reliability measures:
+```
+python -m venv .venv
+```
 
-* safe text extraction
-* safe attribute extraction
-* timeout handling
-* block-page detection
-* fallback selectors
-* partial record saving even if some fields are missing
+### 2. Activate environment
 
-This means the scraper can still produce output even when:
+Linux / macOS
 
-* some selectors are missing
-* some fields are unavailable
-* the page loads partially
-* the site temporarily blocks access
+```
+source .venv/bin/activate
+```
+
+Windows
+
+```
+.venv\Scripts\activate
+```
 
 ---
 
-## Notes Per Site
+### 3. Install dependencies
+
+```
+pip install -r requirements.txt
+```
+
+---
+
+### 4. Install Playwright browsers
+
+```
+playwright install
+```
+
+---
+
+# How to Run
+
+Run each scraper individually.
 
 ### Food City
 
-This site may fail to load or show connection issues depending on environment or region.
+```
+python food_city_main.py
+```
 
 ### Target
 
-This site may show a wait/throttle page such as:
-
-* “Sorry for the wait”
-* “It’s a little busier than we expected”
+```
+python target_main.py
+```
 
 ### Walmart
 
-This site may sometimes return:
+```
+python walmart_main.py
+```
 
-* “We couldn’t find this page”
-  even when the product exists in another live listing or region-specific route.
+### Walmart (alternative experiments)
 
-Because of that, the scraper checks whether the loaded page is actually a valid product page before extracting.
+```
+python walmart_wellness.py
+python walmart_next_data.py
+```
+
+### Jumia validation test
+
+```
+python jumia_noxzema_data.py
+```
 
 ---
 
-## Development Tips
+# Current Results
+
+| Site      | Result  | Notes                                             |
+| --------- | ------- | ------------------------------------------------- |
+| Food City | Failed  | Domain resolution error (`ERR_NAME_NOT_RESOLVED`) |
+| Target    | Blocked | Challenge / wait page detected                    |
+| Walmart   | Blocked | Bot challenge page returned                       |
+| Jumia     | Success | Product extracted successfully                    |
+
+The successful Jumia test confirms that the **scraper architecture and extraction logic work correctly**.
+
+The main limitation encountered is **anti-bot protection on some retailers** rather than extraction logic errors.
+
+---
+
+# Known Limitations
+
+Some ecommerce sites deploy advanced bot protection systems that may block automated browsing.
+
+Examples observed during testing:
+
+Target:
+
+* "Sorry for the wait"
+
+Walmart:
+
+* "Robot or human?"
+* "Activate and hold the button to confirm that you’re human"
+
+Because of these protections, the scraper may receive a challenge page instead of the real product page.
+
+---
+
+# Possible Improvements
+
+Future improvements could include:
+
+* proxy support
+* rotating user agents
+* retry with exponential backoff
+* screenshot capture on failure
+* improved selector configuration per site
+* centralized base scraper class
+* structured logging
+
+---
+
+# Development Tips
 
 While testing:
 
 * keep `headless=False`
-* run one script at a time
-* inspect the loaded page manually if extraction fails
-* verify selectors with browser DevTools
-* check whether the page is a product page or a block/error page
-
-When stable, you can try switching to:
-
-```python
-headless=True
-```
-
-but visible mode is safer for these sites.
+* run scripts one at a time
+* inspect loaded pages using browser DevTools
+* verify whether the page is a real product page or a block page
 
 ---
 
-## Possible Improvements
+# Disclaimer
 
-Future upgrades could include:
+This project is for **educational and technical demonstration purposes**.
 
-* shared `base_scraper.py`
-* retry with exponential backoff
-* screenshot on failure
-* save raw HTML on failure
-* logging to file
-* selector configuration per site
-* proxy support via `.env`
+Websites may restrict automated access, so scraping behavior can vary depending on:
 
----
+* IP reputation
+* region
+* request frequency
+* browser fingerprint
 
-## Disclaimer
-
-Use this scraper responsibly and only where you have the right to access and collect the data.
-Retail sites may rate-limit, challenge, or block automated traffic, so stability can vary by IP, region, and session state.
+Always respect website terms of service.
 
 ---
 
-## Author
+# Author
 
-Built with Python, Playwright, and pandas.
+Python • Playwright • BeautifulSoup
 
-```
+GitHub repository:
 
+[https://github.com/syntaxland/veefyed-web-scraping-playwright](https://github.com/syntaxland/veefyed-web-scraping-playwright)
+
+---
