@@ -1,4 +1,4 @@
-# Product Scraper Python, Playwright and BeautifulSoup (Veefyed)
+# Product Scraper - Python, Playwright and BeautifulSoup (Veefyed)
 
 This repository contains a set of **Python Playwright-based scrapers** designed to extract product information from several ecommerce product pages.
 
